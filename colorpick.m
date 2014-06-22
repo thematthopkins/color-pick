@@ -9,73 +9,269 @@
 #import <Foundation/Foundation.h>
 #import <AppKit/AppKit.h>
 
+@interface NSColor (Additions)
++(NSColor *)colorFromString:(NSString *)colorRepresentation;
 
-@interface NSColor (NSColorHexadecimalValue)
+// Compacts a regular hex6 string where possible.
+//
+// I.e. this can be compacted:
+//   "#ff0000" => "#f00"
+//
+// This, however, can not be compacted:
+//   "#cbb298" => "#cbb298"
+-(NSString *)toHexString;
+-(NSString *)toHexStringWithoutHash;
+
+-(NSString *)toRGBString:(BOOL)shortVersion;
+-(NSString *)toRGBAString:(BOOL)shortVersion;
+
+-(NSString *)toHSLString:(BOOL)shortVersion;
+-(NSString *)toHSLAString:(BOOL)shortVersion;
+
+-(NSString *)toObjcNSColor:(BOOL)shortVersion;
+-(NSString *)toMacRubyNSColor:(BOOL)shortVersion;
+
+-(NSString *)toObjcUIColor:(BOOL)shortVersion;
+-(NSString *)toMotionUIColor:(BOOL)shortVersion;
 @end
 
-@implementation NSColor (NSColorHexadecimalValue)
 
-// NSColorHexadecimalValue from http://developer.apple.com/library/mac/#qa/qa1576/_index.html
--(NSString *)hexValue {
-  CGFloat redFloatValue, greenFloatValue, blueFloatValue;
-  int redIntValue, greenIntValue, blueIntValue;
-  NSString *redHexValue, *greenHexValue, *blueHexValue;
-
-  // Convert the NSColor to the RGB color space before we can access its components
-  NSColor *convertedColor = [self colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
-
-  if(convertedColor) {
-    // Get the red, green, and blue components of the color
-    [convertedColor getRed:&redFloatValue green:&greenFloatValue blue:&blueFloatValue alpha:NULL];
-
-    // Convert the components to numbers (unsigned decimal integer) between 0 and 255
-    redIntValue=redFloatValue*255.99999f;
-    greenIntValue=greenFloatValue*255.99999f;
-    blueIntValue=blueFloatValue*255.99999f;
-
-    // Convert the numbers to hex strings
-    redHexValue=[NSString stringWithFormat:@"%02x", redIntValue];
-    greenHexValue=[NSString stringWithFormat:@"%02x", greenIntValue];
-    blueHexValue=[NSString stringWithFormat:@"%02x", blueIntValue];
-
-    // Concatenate the red, green, and blue components' hex strings together
-    return [NSString stringWithFormat:@"%@%@%@", redHexValue, greenHexValue, blueHexValue];
+@implementation NSColor (Additions)
++(NSColor *)colorFromString:(NSString *)colorRepresentation {
+  float alpha = 1;
+  
+  NSScanner *scanner = [NSScanner scannerWithString: [colorRepresentation lowercaseString]];
+  NSMutableCharacterSet *skipChars = [NSMutableCharacterSet characterSetWithCharactersInString: @"%,"];
+  [skipChars formUnionWithCharacterSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  [scanner setCharactersToBeSkipped: skipChars];
+  
+  if ([scanner scanString:@"hsl(" intoString:nil] || [scanner scanString:@"hsla(" intoString:nil]) {
+    int hue = 0, saturation = 0, brightness = 0;
+    
+    [scanner scanInt: &hue];
+    [scanner scanInt: &saturation];
+    [scanner scanInt: &brightness];
+    [scanner scanFloat: &alpha];
+    
+    return [NSColor colorWithCalibratedHue: (hue / 360.0)
+                                saturation: (saturation / 100.0)
+                                brightness: (brightness / 100.0)
+                                     alpha: alpha];
   }
-  return nil;
+  
+  float red = 0, green = 0, blue = 0;
+  
+  if ([scanner scanString:@"rgb(" intoString:nil] || [scanner scanString:@"rgba(" intoString:nil]) {
+    signed int r = 0, g = 0, b = 0;
+    
+    [scanner scanInt: &r];
+    [scanner scanInt: &g];
+    [scanner scanInt: &b];
+    [scanner scanFloat: &alpha];
+    
+    red = ((unsigned int)r / 255.0); green = ((unsigned int)g / 255.0); blue = ((unsigned int)b / 255.0);
+    
+  } else if ([scanner scanString:@"[NSColor" intoString:nil] || [scanner scanString:@"NSColor." intoString:nil]) {
+    // objective-c or macruby NSColor
+    [scanner scanString:@"colorWithCalibratedRed:" intoString:nil] || [scanner scanString:@"colorWithCalibratedRed(" intoString:nil];
+    [scanner scanFloat: &red];
+    [scanner scanString:@"green:" intoString:nil];
+    [scanner scanFloat: &green];
+    [scanner scanString:@"blue:" intoString:nil];
+    [scanner scanFloat: &blue];
+    [scanner scanString:@"alpha:" intoString:nil];
+    [scanner scanFloat: &alpha];
+
+  } else if ([scanner scanString:@"[UIColor" intoString:nil] || [scanner scanString:@"UIColor." intoString:nil]) {
+    [scanner scanString:@"colorWithRed:" intoString:nil] || [scanner scanString:@"colorWithRed(" intoString:nil];
+    [scanner scanFloat: &red];
+    [scanner scanString:@"green:" intoString:nil];
+    [scanner scanFloat: &green];
+    [scanner scanString:@"blue:" intoString:nil];
+    [scanner scanFloat: &blue];
+    [scanner scanString:@"alpha:" intoString:nil];
+    [scanner scanFloat: &alpha];
+
+  } else {
+    [scanner scanString:@"#" intoString:nil];
+
+    unsigned int r = 0, g = 0, b = 0;
+    NSString *hex = @"000000";
+
+    NSCharacterSet *hexChars = [NSCharacterSet characterSetWithCharactersInString: @"0123456789abcdef"];
+
+    if([scanner scanCharactersFromSet:hexChars intoString:&hex]){
+
+      if ([hex length] == 3) {
+        [[NSScanner scannerWithString: [hex substringWithRange: NSMakeRange(0, 1)]] scanHexInt: &r];
+        [[NSScanner scannerWithString: [hex substringWithRange: NSMakeRange(1, 1)]] scanHexInt: &g];
+        [[NSScanner scannerWithString: [hex substringWithRange: NSMakeRange(2, 1)]] scanHexInt: &b];
+        r += r * 16; g += g * 16; b += b * 16;
+      } else if ([hex length] == 6) {
+        [[NSScanner scannerWithString: [hex substringWithRange: NSMakeRange(0, 2)]] scanHexInt: &r];
+        [[NSScanner scannerWithString: [hex substringWithRange: NSMakeRange(2, 2)]] scanHexInt: &g];
+        [[NSScanner scannerWithString: [hex substringWithRange: NSMakeRange(4, 2)]] scanHexInt: &b];
+      } else {
+        return nil;
+      }
+
+      red = (r / 255.0); green = (g / 255.0); blue = (b / 255.0);
+
+    } else {
+      return nil;
+    }
+  }
+  
+  return [NSColor colorWithCalibratedRed:red green:green blue:blue alpha:alpha];
 }
 
-// color from hex found from http://www.karelia.com/cocoa_legacy/Foundation_Categories/NSColor__Instantiat.m
-+ (NSColor *)colorFromHex:(NSString *)inColorString {
-  NSColor *result = nil;
-  unsigned int colorCode = 0;
-  unsigned char redByte, greenByte, blueByte;
+-(NSString *)toHexString {
+    return [NSString stringWithFormat:@"#%@", [self toHexStringWithoutHash]];
+}
 
-  if ([inColorString length] == 3) {
-    NSString *newColor = [[NSString alloc] initWithFormat:@"%@%@%@%@%@%@",
-      [inColorString substringWithRange: NSMakeRange(0,1)],
-      [inColorString substringWithRange: NSMakeRange(0,1)],
-      [inColorString substringWithRange: NSMakeRange(1,1)],
-      [inColorString substringWithRange: NSMakeRange(1,1)],
-      [inColorString substringWithRange: NSMakeRange(2,1)],
-      [inColorString substringWithRange: NSMakeRange(2,1)]];
-    inColorString = [newColor autorelease];
-  }
+-(NSString *)toHexStringWithoutHash {
+    NSColor *color = [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+    
+    NSString *result = [NSString stringWithFormat: @"%02x%02x%02x",
+                        (unsigned int)(255 * [color redComponent]),
+                        (unsigned int)(255 * [color greenComponent]),
+                        (unsigned int)(255 * [color blueComponent])];
+    
+    if (([result characterAtIndex: 0] == [result characterAtIndex: 1]) &&
+        ([result characterAtIndex: 2] == [result characterAtIndex: 3]) &&
+        ([result characterAtIndex: 4] == [result characterAtIndex: 5])) {
+        return [NSString stringWithFormat: @"%C%C%C",
+                [result characterAtIndex: 0],
+                [result characterAtIndex: 2],
+                [result characterAtIndex: 4]];
+    } else {
+        return result;
+    }  
+}
 
-  if (nil != inColorString) {
-    NSScanner *scanner = [NSScanner scannerWithString:inColorString];
-    (void) [scanner scanHexInt:&colorCode]; // ignore error
-  }
-  redByte   = (unsigned char) (colorCode >> 16);
-  greenByte = (unsigned char) (colorCode >> 8);
-  blueByte  = (unsigned char) (colorCode);  // masks off high bits
-  result = [NSColor colorWithCalibratedRed:(float)redByte / 0xff
-                                     green:(float)greenByte/ 0xff
-                                      blue:(float)blueByte / 0xff
-                                     alpha:1.0];
+-(NSString *)toRGBString:(BOOL)shortVersion {
+  NSColor *color = [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  
+  NSString *result = [NSString stringWithFormat: (shortVersion ? @"%d, %d, %d" : @"rgb(%d, %d, %d)"),
+                       (unsigned int)(255 * [color redComponent]),
+                       (unsigned int)(255 * [color greenComponent]),
+                       (unsigned int)(255 * [color blueComponent])];
+  
   return result;
 }
 
+-(NSString *)toRGBAString:(BOOL)shortVersion {
+  NSColor *color = [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  
+  NSString *result = [NSString stringWithFormat: (shortVersion ? @"%d, %d, %d, %g" : @"rgba(%d, %d, %d, %g)"),
+                       (unsigned int)(255 * [color redComponent]),
+                       (unsigned int)(255 * [color greenComponent]),
+                       (unsigned int)(255 * [color blueComponent]),
+                       (float)[color alphaComponent]];
+  
+  return result;
+}
+
+-(NSString *)toHSLString:(BOOL)shortVersion {
+  NSColor *color = [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  
+  NSString *result = [NSString stringWithFormat: (shortVersion ? @"%d, %d%%, %d%%" : @"hsl(%d, %d%%, %d%%)"),
+                       (unsigned int)(360 * [color hueComponent]),
+                       (unsigned int)(100 * [color saturationComponent]),
+                       (unsigned int)(100 * [color brightnessComponent])];
+  
+  return result;
+}
+
+-(NSString *)toHSLAString:(BOOL)shortVersion {
+  NSColor *color = [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  
+  NSString *result = [NSString stringWithFormat: (shortVersion ? @"%d, %d%%, %d%%, %g" : @"hsla(%d, %d%%, %d%%, %g)"),
+                       (unsigned int)(360 * [color hueComponent]),
+                       (unsigned int)(100 * [color saturationComponent]),
+                       (unsigned int)(100 * [color brightnessComponent]),
+                       (float)[color alphaComponent]];
+  
+  return result;
+}
+
+-(NSString *)_componentToString:(CGFloat)component {
+  if (component == 0.0) {
+    return @"0.0";
+  } else if (component == 1.0) {
+    return @"1.0";
+  } else {
+    return [NSString stringWithFormat: @"%g", component];
+  }
+}
+
+-(NSString *)toObjcNSColor:(BOOL)shortVersion {
+  NSColor *color = [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  
+  if (shortVersion) {
+    return [NSString stringWithFormat: @"%g %g %g %g",
+                                       [color redComponent],
+                                       [color greenComponent],
+                                       [color blueComponent],
+                                       [color alphaComponent]];
+  } else {
+    NSString *red   = [self _componentToString: [color redComponent]];
+    NSString *green = [self _componentToString: [color greenComponent]];
+    NSString *blue  = [self _componentToString: [color blueComponent]];
+    NSString *alpha = [self _componentToString: [color alphaComponent]];
+    return [NSString stringWithFormat: @"[NSColor colorWithCalibratedRed:%@ green:%@ blue:%@ alpha:%@]", red, green, blue, alpha];
+  }
+}
+
+-(NSString *)toMacRubyNSColor:(BOOL)shortVersion {
+  if (shortVersion) {
+    return [self toObjcNSColor: YES];
+  }
+
+  NSColor *color = [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+
+  NSString *result = [NSString stringWithFormat: @"NSColor.colorWithCalibratedRed(%g, green: %g, blue: %g, alpha: %g)",
+                                                 [color redComponent],
+                                                 [color greenComponent],
+                                                 [color blueComponent],
+                                                 [color alphaComponent]];
+
+  return result;
+}
+
+-(NSString *)toObjcUIColor:(BOOL)shortVersion {
+
+  if (shortVersion) {
+    return [self toObjcNSColor: YES];
+  } else {
+    NSColor *color = [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+
+    NSString *red   = [self _componentToString: [color redComponent]];
+    NSString *green = [self _componentToString: [color greenComponent]];
+    NSString *blue  = [self _componentToString: [color blueComponent]];
+    NSString *alpha = [self _componentToString: [color alphaComponent]];
+    return [NSString stringWithFormat: @"[UIColor colorWithRed:%@ green:%@ blue:%@ alpha:%@]", red, green, blue, alpha];
+  }
+}
+
+-(NSString *)toMotionUIColor:(BOOL)shortVersion {
+  if (shortVersion) {
+    return [self toObjcNSColor: YES];
+  } else {
+    NSColor *color = [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+
+    NSString *result = [NSString stringWithFormat: @"NSColor.colorWithCalibratedRed(%g, green: %g, blue: %g, alpha: %g)",
+                                                   [color redComponent],
+                                                   [color greenComponent],
+                                                   [color blueComponent],
+                                                   [color alphaComponent]];
+
+    return result;
+  }    
+}
+
 @end
+
 
 @interface Picker : NSObject <NSApplicationDelegate, NSWindowDelegate> {
   NSColorPanel *panel; // weak ref
@@ -113,7 +309,7 @@
 
   panel = [NSColorPanel sharedColorPanel];
   [panel setDelegate:self];
-  [panel setShowsAlpha:NO]; // TODO: support for rgba() output values
+  [panel setShowsAlpha:YES]; // TODO: support for rgba() output values
   [panel setAccessoryView:[accessoryView autorelease]];
   [panel setDefaultButtonCell:[button cell]];
 
@@ -121,7 +317,7 @@
   NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
   NSString *color = [defaults stringForKey:@"startColor"];
   if (color != nil) {
-    [panel setColor:[NSColor colorFromHex:color]];
+    [panel setColor:[NSColor colorFromString:color]];
   }
   [panel setMode:[defaults integerForKey:@"mode"]]; // will be 0 if not set, wich is NSGrayModeColorPanel
 
@@ -131,7 +327,7 @@
 }
 
 - (void)writeColor {
-  NSString *hex = [panel.color hexValue];
+  NSString *hex = [panel.color toRGBAString:false];
 
   // save color and current mode to defaults
   NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
@@ -145,6 +341,7 @@
 
   [self exit];
 }
+
 
 - (void)exit {
   [panel close];
