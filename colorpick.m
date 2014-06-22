@@ -25,6 +25,8 @@
 -(NSString *)toRGBString:(BOOL)shortVersion;
 -(NSString *)toRGBAString:(BOOL)shortVersion;
 
+-(NSString *)toSmartString; // opacity == 1 hex : rgba
+
 -(NSString *)toHSLString:(BOOL)shortVersion;
 -(NSString *)toHSLAString:(BOOL)shortVersion;
 
@@ -170,6 +172,12 @@
                        (float)[color alphaComponent]];
   
   return result;
+}
+
+-(NSString *)toSmartString {
+  NSColor *color = [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  
+  return ((float)[color alphaComponent] < 1) ? [self toRGBAString:false] : [self toHexString];
 }
 
 -(NSString *)toHSLString:(BOOL)shortVersion {
@@ -327,7 +335,7 @@
 }
 
 - (void)writeColor {
-  NSString *hex = [panel.color toRGBAString:false];
+  NSString *hex = [panel.color toSmartString];
 
   // save color and current mode to defaults
   NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
