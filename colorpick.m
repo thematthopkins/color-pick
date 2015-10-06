@@ -370,6 +370,10 @@
   [self show];
 }
 
+- (BOOL) applicationShouldTerminateAfterLastWindowClosed:(NSApplication *) theApplication {
+    return YES;
+}
+
 @end
 
 int main (int argc, const char * argv[]) {
