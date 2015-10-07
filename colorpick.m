@@ -41,38 +41,38 @@
 @implementation NSColor (Additions)
 +(NSColor *)colorFromString:(NSString *)colorRepresentation {
   float alpha = 1;
-  
+
   NSScanner *scanner = [NSScanner scannerWithString: [colorRepresentation lowercaseString]];
   NSMutableCharacterSet *skipChars = [NSMutableCharacterSet characterSetWithCharactersInString: @"%,"];
   [skipChars formUnionWithCharacterSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
   [scanner setCharactersToBeSkipped: skipChars];
-  
+
   if ([scanner scanString:@"hsl(" intoString:nil] || [scanner scanString:@"hsla(" intoString:nil]) {
     int hue = 0, saturation = 0, brightness = 0;
-    
+
     [scanner scanInt: &hue];
     [scanner scanInt: &saturation];
     [scanner scanInt: &brightness];
     [scanner scanFloat: &alpha];
-    
+
     return [NSColor colorWithCalibratedHue: (hue / 360.0)
                                 saturation: (saturation / 100.0)
                                 brightness: (brightness / 100.0)
                                      alpha: alpha];
   }
-  
+
   float red = 0, green = 0, blue = 0;
-  
+
   if ([scanner scanString:@"rgb(" intoString:nil] || [scanner scanString:@"rgba(" intoString:nil]) {
     signed int r = 0, g = 0, b = 0;
-    
+
     [scanner scanInt: &r];
     [scanner scanInt: &g];
     [scanner scanInt: &b];
     [scanner scanFloat: &alpha];
-    
+
     red = ((unsigned int)r / 255.0); green = ((unsigned int)g / 255.0); blue = ((unsigned int)b / 255.0);
-    
+
   } else if ([scanner scanString:@"[NSColor" intoString:nil] || [scanner scanString:@"NSColor." intoString:nil]) {
     // objective-c or macruby NSColor
     [scanner scanString:@"colorWithCalibratedRed:" intoString:nil] || [scanner scanString:@"colorWithCalibratedRed(" intoString:nil];
@@ -123,7 +123,7 @@
       return nil;
     }
   }
-  
+
   return [NSColor colorWithCalibratedRed:red green:green blue:blue alpha:alpha];
 }
 
@@ -133,73 +133,61 @@
 
 -(NSString *)toHexStringWithoutHash {
     NSColor *color = [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
-    
-    NSString *result = [NSString stringWithFormat: @"%02x%02x%02x",
+
+    return [NSString stringWithFormat: @"%02x%02x%02x%02x",
                         (unsigned int)(255 * [color redComponent]),
                         (unsigned int)(255 * [color greenComponent]),
-                        (unsigned int)(255 * [color blueComponent])];
-    
-    if (([result characterAtIndex: 0] == [result characterAtIndex: 1]) &&
-        ([result characterAtIndex: 2] == [result characterAtIndex: 3]) &&
-        ([result characterAtIndex: 4] == [result characterAtIndex: 5])) {
-        return [NSString stringWithFormat: @"%C%C%C",
-                [result characterAtIndex: 0],
-                [result characterAtIndex: 2],
-                [result characterAtIndex: 4]];
-    } else {
-        return result;
-    }  
+                        (unsigned int)(255 * [color blueComponent]),
+                        (unsigned int)(255 * [color alphaComponent])];
 }
 
 -(NSString *)toRGBString:(BOOL)shortVersion {
   NSColor *color = [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
-  
+
   NSString *result = [NSString stringWithFormat: (shortVersion ? @"%d, %d, %d" : @"rgb(%d, %d, %d)"),
                        (unsigned int)(255 * [color redComponent]),
                        (unsigned int)(255 * [color greenComponent]),
                        (unsigned int)(255 * [color blueComponent])];
-  
+
   return result;
 }
 
 -(NSString *)toRGBAString:(BOOL)shortVersion {
   NSColor *color = [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
-  
+
   NSString *result = [NSString stringWithFormat: (shortVersion ? @"%d, %d, %d, %g" : @"rgba(%d, %d, %d, %g)"),
                        (unsigned int)(255 * [color redComponent]),
                        (unsigned int)(255 * [color greenComponent]),
                        (unsigned int)(255 * [color blueComponent]),
                        (float)[color alphaComponent]];
-  
+
   return result;
 }
 
 -(NSString *)toSmartString {
-  NSColor *color = [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
-  
-  return ((float)[color alphaComponent] < 1) ? [self toRGBAString:false] : [self toHexString];
+  return [self toHexString];
 }
 
 -(NSString *)toHSLString:(BOOL)shortVersion {
   NSColor *color = [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
-  
+
   NSString *result = [NSString stringWithFormat: (shortVersion ? @"%d, %d%%, %d%%" : @"hsl(%d, %d%%, %d%%)"),
                        (unsigned int)(360 * [color hueComponent]),
                        (unsigned int)(100 * [color saturationComponent]),
                        (unsigned int)(100 * [color brightnessComponent])];
-  
+
   return result;
 }
 
 -(NSString *)toHSLAString:(BOOL)shortVersion {
   NSColor *color = [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
-  
+
   NSString *result = [NSString stringWithFormat: (shortVersion ? @"%d, %d%%, %d%%, %g" : @"hsla(%d, %d%%, %d%%, %g)"),
                        (unsigned int)(360 * [color hueComponent]),
                        (unsigned int)(100 * [color saturationComponent]),
                        (unsigned int)(100 * [color brightnessComponent]),
                        (float)[color alphaComponent]];
-  
+
   return result;
 }
 
@@ -215,7 +203,7 @@
 
 -(NSString *)toObjcNSColor:(BOOL)shortVersion {
   NSColor *color = [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
-  
+
   if (shortVersion) {
     return [NSString stringWithFormat: @"%g %g %g %g",
                                        [color redComponent],
@@ -275,7 +263,7 @@
                                                    [color alphaComponent]];
 
     return result;
-  }    
+  }
 }
 
 @end
@@ -371,13 +359,21 @@
 }
 
 - (BOOL) applicationShouldTerminateAfterLastWindowClosed:(NSApplication *) theApplication {
-    return YES;
+  return YES;
 }
 
 @end
 
 int main (int argc, const char * argv[]) {
   NSAutoreleasePool * pool = [[NSAutoreleasePool alloc] init];
+
+  if(argc == 2){
+    NSString* color = [NSString stringWithUTF8String:argv[1]];
+    NSString* colorWithoutAlpha = [color substringWithRange:NSMakeRange(0, 6)];
+    [[NSUserDefaults standardUserDefaults] setObject:colorWithoutAlpha forKey:@"startColor"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+  }
+
   NSApplication *app = [NSApplication sharedApplication];
   app.delegate = [[[Picker alloc] init] autorelease];
   [app run];
